@@ -1,0 +1,79 @@
+---
+title: "Spain Primera 1st 19 games Player Stats"
+output:
+  html_document:
+    df_print: paged
+  flexdashboard::flex_dashboard:
+    orientation: columns
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(data.table)
+library(stringr)
+library(tidyverse)
+library(highcharter)
+library(DT)
+
+```
+
+```{r load_data, include = FALSE}
+dt <- fread('data_3.5_seasons.csv')
+```
+
+```{r functions, include = FALSE}
+
+```
+
+```{r prepare main table by league, include = FALSE}
+all_by_league <- dt[, .(.N, half1 = round(sum(goals1) / (sum(goals1) + sum(goals2)), digits = 3), 
+       half2 = round(sum(goals2) / (sum(goals1) + sum(goals2)), digits = 3), 
+       ave_TG = round(mean(TG), digits = 2), 
+       sd_TG = round(sd(TG), digits = 2)), by = c('League')]
+```
+
+
+```{r prepare data for Teams page, include = FALSE}
+
+```
+
+
+All Players
+=====================================
+
+
+### 
+
+```{r}
+datatable(
+  all_by_league, rownames = FALSE,
+  extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  ))
+```
+
+
+Team Goals By Player
+=====================================
+
+Row {.tabset .tabset-fade}
+-------------------------------------
+   
+### Barcelona
+
+```{r}
+
+```   
+ 
+### Atletico
+    
+```{r}
+
+```
+
+### Sevilla
+    
+```{r}
+
+```

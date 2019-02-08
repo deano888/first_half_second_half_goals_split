@@ -1,0 +1,312 @@
+---
+title: "1st Half v 2nd Half Goals"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(data.table)
+library(stringr)
+library(tidyverse)
+library(highcharter)
+library(DT)
+library(boot)
+library(ggplot2)
+library(plyr)
+```
+
+```{r load_data, include = FALSE}
+dt <- fread('data_3.5_seasons.csv')
+dt$Year <- as.factor(dt$Year)
+```
+
+```{r functions, include = FALSE}
+get_league_split <- function(league, dt){
+  # get 1st half
+  half1 <- dt[, .(.N, percent = sum(goals1) / (sum(goals1) + sum(goals2))), by = c('Year', 'League')]
+  half1$half <- '1st Half'
+  # get 2nd half
+  half2 <- dt[, .(.N, percent = sum(goals2) / (sum(goals1) + sum(goals2))), by = c('Year', 'League')]
+  half2$half <- '2nd Half'
+  # bind
+  all <- rbind(half1, half2)
+  all$percent <- round(all$percent, 3)
+  result <- all[League==league,]
+  return(result)
+  
+}
+```
+
+```{r prepare main tables by league, year, include = FALSE}
+all_by_league <- dt[, .(.N, half1 = round(sum(goals1) / (sum(goals1) + sum(goals2)), digits = 3), 
+       half2 = round(sum(goals2) / (sum(goals1) + sum(goals2)), digits = 3), 
+       ave_TG = round(mean(TG), digits = 2), 
+       sd_TG = round(sd(TG), digits = 2)), by = c('League')][order(half1)]
+
+# need to add an All row to this!
+all.line <- dt[, .(.N, half1 = round(sum(goals1) / (sum(goals1) + sum(goals2)), digits = 3), 
+       half2 = round(sum(goals2) / (sum(goals1) + sum(goals2)), digits = 3), 
+       ave_TG = round(mean(TG), digits = 2), 
+       sd_TG = round(sd(TG), digits = 2))]
+all.line$League <- 'All'
+# re order
+all.line <- all.line[, .(League, N, half1, half2, ave_TG, sd_TG)]
+# bind
+all_by_league <- rbind(all_by_league, all.line)
+all_by_league <- all_by_league[order(half1)]
+
+##
+all <- dt[, .(.N, half1 = round(sum(goals1) / (sum(goals1) + sum(goals2)), digits = 3), 
+    half2 = round(sum(goals2) / (sum(goals1) + sum(goals2)), digits = 3), 
+    ave_TG = round(mean(TG), digits = 2), 
+    sd_TG = round(sd(TG), digits = 2)), by = c('League', 'Year')]
+
+```
+
+
+```{r prepare data for Leagues, include = FALSE}
+prem <- get_league_split('England Prem', dt)
+champ <- get_league_split('England Champ', dt)
+eng.league1 <- get_league_split('England League1', dt)
+eng.league2 <- get_league_split('England League1', dt)
+bund1 <- get_league_split('Germany1', dt)
+bund2 <- get_league_split('Germany2', dt)
+spain1 <- get_league_split('Spain1', dt)
+spain2 <- get_league_split('Spain2', dt)
+italy1 <- get_league_split('Italy1', dt)
+italy2 <- get_league_split('Italy2', dt)
+```
+
+
+```{r prepare data all by year, include = FALSE}
+half1 <- dt[, .(.N, percent = sum(goals1) / (sum(goals1) + sum(goals2))), by = c('Year')]
+half1$half <- '1st Half'
+half2 <- dt[, .(.N, percent = sum(goals2) / (sum(goals1) + sum(goals2))), by = c('Year')]
+half2$half <- '2nd Half'
+all.by.half <- rbind(half1, half2)
+all.by.half$percent <- round(all.by.half$percent, 3)
+
+```
+
+```{r prepare data for bootstrap conf ints, include = FALSE}
+bootstraps <- fread('bootstrap_conf_ints.csv')
+# re order 
+leagues <- bootstraps$League
+bootstraps$League <- factor(bootstraps$League, levels = leagues)
+
+actual.mean.goals <- 0.434	
+
+boot.plot <- ggplot(bootstraps, aes(y = League, x = First.half.Goals.Percent, color = League)) +
+  geom_point(size = 2)  +
+  geom_vline(xintercept = actual.mean.goals, linetype = 3, color = "black") + 
+  geom_errorbarh(aes(xmin = lower.confint, xmax = upper.conf.int),
+                 height = 0, lwd = 0) +
+  geom_errorbarh(aes(xmin = lower.confint, 
+                     xmax = upper.conf.int), height = 0, lwd = 1) +
+  # ggtitle("First Half Goal Percent By League With Confidence Levels 0.95%\ Mean All Games = 0.434") +
+  ggtitle(expression(atop("First half goal percent by league with 95% Confidence Levels", atop(italic("Mean All Games = 0.434"), "")))) +
+  theme(plot.title = element_text(hjust=0.5), legend.position="none") +
+  xlab("1st Half Goals %") 
+
+```
+
+```{r merge all by league and bootstraps, include = FALSE}
+setkey(all_by_league, League)
+setkey(bootstraps, League)
+all_by_league <- all_by_league[bootstraps, nomatch=0]
+all_by_league$First.half.Goals.Percent <- round(all_by_league$First.half.Goals.Percent, 3)
+all_by_league$lower.confint <- round(all_by_league$lower.confint, 3)
+all_by_league$upper.conf.int <- round(all_by_league$upper.conf.int, 3)
+setnames(all_by_league, c('League', 'N', 'half1', 'half2', 'ave_TG', 'sd_TG', 'boot_half1', 'lower_conf', 'upper_conf'))
+all_by_league[order(half1)]
+# all_by_league[order(game_day)]
+```
+
+
+
+All By Country
+=====================================
+
+### 
+
+```{r}
+datatable(
+  all_by_league, rownames = FALSE,
+  options = list(pageLength = 16, 
+                 lengthMenu = c(5, 10, 16)),
+  extensions = 'Buttons', 
+  #options = list(
+    #dom = 'Bfrtip',
+    #buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  #)
+)
+
+```
+
+Bootstrap Confidence Intervals
+=====================================
+
+### 
+
+```{r}
+boot.plot
+
+```
+
+All By Country, Year
+=====================================
+
+### 
+
+```{r}
+datatable(
+  all, rownames = FALSE,
+  extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  ))
+
+```
+
+
+England
+=====================================
+
+Row {.tabset .tabset-fade}
+-------------------------------------
+   
+### Prem
+
+```{r}
+hchart(prem, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```   
+ 
+### Championship
+    
+```{r}
+hchart(champ, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```
+
+### League 1
+    
+```{r}
+hchart(eng.league1, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```
+
+### League 2
+    
+```{r}
+hchart(eng.league2, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```
+
+Germany
+=====================================
+
+Row {.tabset .tabset-fade}
+-------------------------------------
+   
+### Bund 1
+
+```{r}
+hchart(bund1, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```   
+ 
+### Bund 2
+    
+```{r}
+hchart(bund2, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```
+
+Spain
+=====================================
+
+Row {.tabset .tabset-fade}
+-------------------------------------
+   
+### Primera
+
+```{r}
+hchart(spain1, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```   
+ 
+### Segunda
+    
+```{r}
+hchart(spain2, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```
+
+Italy
+=====================================
+
+Row {.tabset .tabset-fade}
+-------------------------------------
+   
+### Seria A
+
+```{r}
+hchart(italy1, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```   
+ 
+### Serie B
+    
+```{r}
+hchart(italy2, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+```       
+
+All
+=====================================
+
+### 
+
+```{r}
+hchart(all.by.half, 
+       "column", 
+       hcaes(x = Year,
+             y = percent, 
+             group = half))
+``` 
+
+
